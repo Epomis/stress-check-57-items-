@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ストレスチェックWebアプリケーション</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Chart.js Radar Chart specific registration -->
+    <script>
+        // Chart.js 4 requires explicit registration of controllers, elements, and scales
+        Chart.register(
+            Chart.controllers.radar,
+            Chart.elements.LineElement,
+            Chart.elements.PointElement,
+            Chart.scales.radialLinear
+        );
+    </script>
+    <style>
+        /* Chosen Palette: Soft blues, grays, and indigo accent for a calm harmony. */
+        /* Application Structure Plan:
+           このアプリケーションは、ユーザーがストレスチェックの質問に回答し、その結果を多角的に視覚化して理解できるよう設計されています。
+           メインの構造は、質問票入力フェーズと結果表示フェーズの2つの主要なセクションに分かれています。
+           - 質問票セクション: 厚生労働省の57項目版ストレスチェックの質問を、A, B, C, Dのグループに分けて表示します。ユーザーは性別を選択し、全ての質問に回答することで結果に進めます。
+           - 結果セクション: 質問票の回答に基づいて計算されたストレスレベルを、複数のレーダーチャートと判定図、詳細な評価点テーブル、過去の結果履歴で表示します。
+             - レーダーチャート: A群（仕事のストレス要因）、B群（心身のストレス反応）、C群（周囲のサポートと仕事や生活の満足度）の3つの異なるレーダーチャートで、各領域のストレスプロフィールを視覚的に示します。これにより、ユーザーは自身のストレスの「原因」「反応」「修飾因子」を直感的に把握できます。
+             - 判定図: 「量―コントロール判定図」と「職場の支援判定図」の2つの散布図形式の判定図で、特定のストレス要因間の関係性と、それに応じた推奨アクション領域を提示します。これにより、より具体的な改善ポイントが明確になります。
+             - 詳細評価点テーブル: 各尺度の5段階評価点を数値で一覧表示し、詳細なデータ確認を可能にします。
+             - 過去の結果履歴: 過去のストレスチェックの結果を時系列で表示し、自身のストレス状態の経時的な変化を追跡できます。
+           この構造は、ユーザーが質問に集中し、その後、段階的に詳細な結果を探索できるような、論理的かつユーザーフレンドリーなフローを提供します。複雑な情報を分かりやすく提示し、自己理解と行動変容を促すことを目的としています。
+        */
+        /* Visualization & Content Choices:
+           - 高ストレス者判定:
+             - 目標: ユーザーに自身の高ストレス状態を明確に伝える。
+             - 視覚化/提示方法: 目立つテキストメッセージと背景色の変化（赤系/緑系）。
+             - インタラクション: なし。
+             - 正当化: 最も重要な結果であり、直感的に状態を把握させるため。
+             - ライブラリ/方法: HTML/Tailwind CSS。
+           - レーダーチャート (A, B, C群):
+             - 目標: 各ストレス領域のバランスとプロフィールを視覚的に比較する。
+             - 視覚化/提示方法: Chart.jsのRadar Chart。各軸は5段階評価点（1:高ストレス, 5:低ストレス）。外側に行くほど良好な状態を示す統一ルール。
+             - インタラクション: ホバー時のツールチップで詳細表示。
+             - 正当化: 複数の尺度を一度に比較でき、全体的な傾向を把握しやすいため。C群はユーザー要望に基づき4軸で構成。
+             - ライブラリ/方法: Chart.js (Canvas)。
+           - 量―コントロール判定図:
+             - 目標: 仕事の量的負担とコントロール度の関係性を理解し、具体的な改善領域を特定する。
+             - 視覚化/提示方法: Chart.jsのScatter Chart（散布図）。X軸に量的負担、Y軸にコントロール度をとり、背景色で4つの判定領域（高ストレス、積極的対応、職場環境改善、良好）を視覚的に区別。
+             - インタラクション: ホバー時のツールチップで詳細表示。
+             - 正当化: 2つの主要なストレス要因の相互作用を明確にし、行動への示唆を与えるため。
+             - ライブラリ/方法: Chart.js (Canvas)。
+           - 職場の支援判定図:
+             - 目標: 職場の対人関係ストレスと上司からのサポートの関係性を理解し、具体的な改善領域を特定する。
+             - 視覚化/提示方法: Chart.jsのScatter Chart（散布図）。X軸に対人関係ストレス、Y軸に上司からのサポートをとり、背景色で4つの判定領域を視覚的に区別。
+             - インタラクション: ホバー時のツールチップで詳細表示。
+             - 正当化: 職場の人間関係とサポート体制の相互作用を明確にし、介入ポイントを示すため。
+             - ライブラリ/方法: Chart.js (Canvas)。
+           - 詳細評価点テーブル:
+             - 目標: 各尺度の具体的な評価点数を確認する。
+             - 視覚化/提示方法: HTMLテーブル。
+             - インタラクション: なし。
+             - 正当化: 数値的な詳細を確認したいユーザー向け。
+             - ライブラリ/方法: HTML。
+           - 過去の結果履歴テーブル:
+             - 目標: 自身のストレス状態の経時変化を追跡する。
+             - 視覚化/提示方法: HTMLテーブル。
+             - インタラクション: なし。
+             - 正当化: 長期的な健康管理とセルフケアのモチベーション維持のため。
+             - ライブラリ/方法: HTML。
+        */
+        /* CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Max width for charts on larger screens */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height for charts */
+            max-height: 400px; /* Max height to prevent excessive vertical space */
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px; /* Slightly taller on medium screens */
+            }
+        }
+        @media (min-width: 1024px) {
+            .chart-container {
+                height: 400px; /* Taller on large screens */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 antialiased">
+    <div id="app" class="min-h-screen flex flex-col">
+        <header class="bg-white shadow-md p-4 sticky top-0 z-10">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-indigo-600">ストレスチェック</h1>
+                <nav>
+                    <button id="nav-form" class="px-4 py-2 rounded-md text-indigo-600 hover:bg-indigo-100 font-medium transition-colors duration-200">質問票</button>
+                    <button id="nav-results" class="px-4 py-2 rounded-md text-gray-600 hover:bg-indigo-100 font-medium transition-colors duration-200">結果</button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
+            <!-- 質問票セクション -->
+            <section id="questionnaire-section" class="bg-white rounded-3xl shadow-xl p-6 sm:p-8 lg:p-10 mb-8">
+                <h2 class="text-3xl font-bold text-indigo-700 mb-6 text-center">ストレスチェック質問票</h2>
+                <p class="text-lg text-gray-700 mb-8 text-center">
+                    厚生労働省推奨の57項目版ストレスチェックです。ご自身の状態に最も当てはまるものをお選びください。
+                </p>
+
+                <!-- Gender Selection -->
+                <div class="bg-blue-50 p-5 rounded-2xl shadow-inner mb-8">
+                    <label class="block text-lg font-semibold text-gray-700 mb-3">性別を選択してください:</label>
+                    <div class="flex flex-wrap gap-4">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="gender" value="male" class="form-radio h-5 w-5 text-indigo-600 border-gray-300 rounded-full focus:ring-indigo-500" required>
+                            <span class="ml-2 text-gray-800">男性</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="radio" name="gender" value="female" class="form-radio h-5 w-5 text-pink-600 border-gray-300 rounded-full focus:ring-pink-500" required>
+                            <span class="ml-2 text-gray-800">女性</span>
+                        </label>
+                    </div>
+                </div>
+
+                <form id="stress-check-form" class="space-y-6">
+                    <!-- Questions by Section -->
+                    <!-- A: 仕事のストレス要因 -->
+                    <div class="mb-10">
+                        <h3 class="text-2xl font-semibold text-indigo-600 mb-6 border-b-2 border-indigo-200 pb-2">
+                            A あなたの仕事についてうかがいます。最もあてはまるものに○を付けてください。
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">1. 非常にたくさんの仕事をしなければならない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A1" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A1" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A1" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A1" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">2. 時間内に仕事が処理しきれない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A2" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A2" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A2" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A2" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">3. 一生懸命働かなければならない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A3" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A3" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A3" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A3" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">4. かなり注意を集中する必要がある</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A4" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A4" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A4" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A4" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">5. 高度の知識や技術が必要なむずかしい仕事だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A5" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A5" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A5" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A5" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">6. 勤務時間中はいつも仕事のことを考えていなければならない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A6" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A6" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A6" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A6" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">7. からだを大変よく使う仕事だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A7" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A7" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A7" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A7" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">8. 自分のペースで仕事ができる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A8" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A8" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A8" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A8" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">9. 自分で仕事の順番・やり方を決めることができる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A9" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A9" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A9" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A9" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">10. 職場の仕事の方針に自分の意見を反映できる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A10" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A10" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A10" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A10" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">11. 自分の技能や知識を仕事で使うことが少ない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A11" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A11" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A11" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A11" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">12. 私の部署内で意見のくい違いがある</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A12" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A12" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A12" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A12" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">13. 私の部署と他の部署とはうまが合わない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A13" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A13" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A13" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A13" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">14. 私の職場の雰囲気は友好的である</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A14" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A14" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A14" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A14" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">15. 私の職場の作業環境(騒音、照明、温度、換気など)はよくない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A15" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A15" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A15" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A15" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">16. 仕事の内容は自分にあっている</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A16" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A16" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A16" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A16" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">17. 働きがいのある仕事だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A17" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">そうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A17" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあそうだ</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A17" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ややちがう</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="A17" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ちがう</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B: 心身のストレス反応 -->
+                    <div class="mb-10">
+                        <h3 class="text-2xl font-semibold text-indigo-600 mb-6 border-b-2 border-indigo-200 pb-2">
+                            B 最近1か月間のあなたの状態についてうかがいます。最もあてはまるものに○を付けてください
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">18. 活気がわいてくる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B1" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B1" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B1" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B1" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">19. 元気がいっぱいだ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B2" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B2" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B2" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B2" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">20. 生き生きする</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B3" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B3" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B3" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B3" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">21. 怒りを感じる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B4" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B4" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B4" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B4" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">22. 内心腹立たしい</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B5" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B5" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B5" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B5" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">23. イライラしている</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B6" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B6" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B6" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B6" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">24. ひどく疲れた</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B7" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B7" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B7" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B7" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">25. へとへとだ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B8" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B8" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B8" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B8" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">26. だるい</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B9" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B9" value="2" class-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B9" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B9" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">27. 気がはりつめている</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B10" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B10" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B10" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B10" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">28. 不安だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B11" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B11" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B11" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B11" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">29. 落着かない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B12" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B12" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B12" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B12" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">30. ゆううつだ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B13" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B13" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B13" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B13" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">31. 何をするのも面倒だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B14" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B14" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B14" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B14" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">32. 物事に集中できない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B15" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B15" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B15" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B15" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">33. 気分が晴れない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B16" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B16" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B16" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B16" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">34. 仕事が手につかない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B17" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B17" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B17" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B17" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">35. 悲しいと感じる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B18" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B18" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B18" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B18" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">36. めまいがする</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B19" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B19" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B19" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B19" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">37. 体のふしぶしが痛む</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B20" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B20" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B20" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B20" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">38. 頭が重かったり頭痛がする</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B21" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B21" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B21" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B21" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">39. 首筋や肩がこる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B22" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B22" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B22" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B22" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">40. 腰が痛い</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B23" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B23" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B23" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B23" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">41. 目が疲れる</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B24" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B24" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B24" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B24" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">42. 動悸や息切れがする</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B25" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B25" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B25" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B25" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">43. 胃腸の具合が悪い</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B26" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B26" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B26" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B26" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">44. 食欲がない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B27" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B27" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B27" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B27" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">45. 便秘や下痢をする</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B28" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B28" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B28" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B28" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">46. よく眠れない</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B29" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどなかった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B29" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ときどきあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B29" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">しばしばあった</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="B29" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">ほとんどいつもあった</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- C: 周囲のサポート -->
+                    <div class="mb-10">
+                        <h3 class="text-2xl font-semibold text-indigo-600 mb-6 border-b-2 border-indigo-200 pb-2">
+                            C あなたの周りの方々についてうかがいます。最もあてはまるものに○を付けてください
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">47. 上司とはどのくらい気軽に話ができますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C1" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C1" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C1" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C1" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">48. 職場の同僚とはどのくらい気軽に話ができますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C2" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C2" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C2" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C2" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">49. 配偶者、家族、友人等とはどのくらい気軽に話ができますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C3" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C3" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C3" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C3" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">50. あなたが困った時、上司はどのくらい頼りになりますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C4" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C4" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C4" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C4" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">51. あなたが困った時、職場の同僚はどのくらい頼りになりますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C5" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C5" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C5" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C5" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">52. あなたが困った時、配偶者、家族、友人等はどのくらい頼りになりますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C6" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C6" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C6" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C6" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">53. あなたの個人的な問題を相談したら、上司はどのくらいきいてくれますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C7" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C7" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C7" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C7" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">54. あなたの個人的な問題を相談したら、職場の同僚はどのくらいきいてくれますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C8" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C8" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C8" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C8" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">55. あなたの個人的な問題を相談したら、配偶者、家族、友人等はどのくらいきいてくれますか？</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C9" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">非常に</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C9" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">かなり</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C9" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">多少</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="C9" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">全くない</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- D: 満足度について -->
+                    <div class="mb-10">
+                        <h3 class="text-2xl font-semibold text-indigo-600 mb-6 border-b-2 border-indigo-200 pb-2">
+                            D 満足度について
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">56. 仕事に満足だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D1" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">満足</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D1" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあ満足</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D1" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">やや不満</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D1" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">不満</span></label>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                <p class="text-lg font-medium text-gray-800 mb-3">57. 家庭生活に満足だ</p>
+                                <div class="flex flex-wrap gap-4 sm:gap-6">
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D2" value="1" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">満足</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D2" value="2" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">まあ満足</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D2" value="3" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">やや不満</span></label>
+                                    <label class="inline-flex items-center cursor-pointer"><input type="radio" name="D2" value="4" class="form-radio h-5 w-5 text-blue-600 rounded-full" required><span class="ml-2 text-gray-700">不満</span></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center mt-8">
+                        <button type="submit" class="px-8 py-4 bg-indigo-600 text-white font-bold text-xl rounded-full shadow-lg hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50">
+                            結果を見る
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 結果セクション -->
+            <section id="results-section" class="bg-white rounded-3xl shadow-xl p-6 sm:p-8 lg:p-10 mb-8 hidden">
+                <h2 class="text-3xl font-bold text-indigo-700 mb-6 text-center">ストレスチェック結果</h2>
+                <p class="text-lg text-gray-700 mb-8 text-center">
+                    あなたのストレスプロフィールと判定結果です。
+                </p>
+
+                <!-- 高ストレス者判定 -->
+                <div id="high-stress-judgment" class="p-6 rounded-2xl shadow-lg text-center mb-8">
+                    <p class="text-xl font-bold text-gray-800" id="high-stress-message"></p>
+                    <p class="mt-2 text-gray-700" id="advice-message"></p>
+                </div>
+
+                <!-- レーダーチャート -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">A: ストレスの原因と考えられる因子</h3>
+                        <div class="chart-container">
+                            <canvas id="radarChartA"></canvas>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-600 text-center">仕事のストレス要因に関するあなたの状態です。</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">B: ストレスによっておこる心身の反応</h3>
+                        <div class="chart-container">
+                            <canvas id="radarChartB"></canvas>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-600 text-center">心身のストレス反応に関するあなたの状態です。</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">C: ストレス反応に影響を与える他の因子</h3>
+                        <div class="chart-container">
+                            <canvas id="radarChartC"></canvas>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-600 text-center">周囲のサポートと仕事や生活の満足度に関するあなたの状態です。</p>
+                    </div>
+                </div>
+
+                <!-- 判定図 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">量―コントロール判定図</h3>
+                        <div class="chart-container">
+                            <canvas id="judgmentChart1"></canvas>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-600 text-center">仕事の量的負担とコントロール度の関係性を示します。</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">職場の支援判定図</h3>
+                        <div class="chart-container">
+                            <canvas id="judgmentChart2"></canvas>
+                        </div>
+                        <p class="mt-4 text-sm text-gray-600 text-center">職場の対人関係ストレスと上司からのサポートの関係性を示します。</p>
+                    </div>
+                </div>
+
+                <!-- 詳細評価点 -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 mb-8">
+                    <h3 class="text-2xl font-semibold text-gray-800 mb-4 text-center">詳細評価点 (5段階評価)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">尺度名</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">評価点</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状態</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detailed-evaluation-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Detailed evaluation points will be inserted here by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 過去の結果履歴 -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+                    <h3 class="text-2xl font-semibold text-gray-800 mb-4 text-center">過去のストレスチェック結果</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">性別</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">B群合計</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">A+C群合計</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">高ストレス者判定</th>
+                                </tr>
+                            </thead>
+                            <tbody id="past-results-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Past results will be inserted here by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-center mt-8">
+                    <button id="back-to-form-button" class="px-8 py-4 bg-blue-600 text-white font-bold text-xl rounded-full shadow-lg hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50">
+                        もう一度ストレスチェックを受ける
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="w-full text-center text-gray-500 text-sm p-4">
+            &copy; 2025 ストレスチェックアプリ. All rights reserved.
+        </footer>
+    </div>
+
+    <script>
+        const STRESS_CHECK_DATA = {
+            sections: [
+                {
+                    id: 'A',
+                    title: 'A あなたの仕事についてうかがいます。最もあてはまるものに○を付けてください。',
+                    questions: [
+                        { id: 'A1', text: '非常にたくさんの仕事をしなければならない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A2', text: '時間内に仕事が処理しきれない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A3', text: '一生懸命働かなければならない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A4', text: 'かなり注意を集中する必要がある', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A5', text: '高度の知識や技術が必要なむずかしい仕事だ', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A6', text: '勤務時間中はいつも仕事のことを考えていなければならない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A7', text: 'からだを大変よく使う仕事だ', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A8', text: '自分のペースで仕事ができる', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A9', text: '自分で仕事の順番・やり方を決めることができる', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A10', text: '職場の仕事の方針に自分の意見を反映できる', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A11', text: '自分の技能や知識を仕事で使うことが少ない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A12', text: '職場の部署内で意見のくい違いがある', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A13', text: '職場の部署と他の部署とはうまが合わない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A14', text: '私の職場の雰囲気は友好的である', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A15', text: '私の職場の作業環境(騒音、照明、温度、換気など)はよくない', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A16', text: '仕事の内容は自分にあっている', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                        { id: 'A17', text: '働きがいのある仕事だ', options: ['そうだ', 'まあそうだ', 'ややちがう', 'ちがう'] },
+                    ]
+                },
+                {
+                    id: 'B',
+                    title: 'B 最近1か月間のあなたの状態についてうかがいます。最もあてはまるものに○を付けてください',
+                    questions: [
+                        { id: 'B1', text: '活気がわいてくる', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B2', text: '元気がいっぱいだ', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B3', text: '生き生きする', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B4', text: '怒りを感じる', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B5', text: '内心腹立たしい', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B6', text: 'イライラしている', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B7', text: 'ひどく疲れた', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B8', text: 'へとへとだ', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B9', text: 'だるい', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B10', text: '気がはりつめている', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B11', text: '不安だ', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B12', text: '落着かない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B13', text: 'ゆううつだ', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B14', text: '何をするのも面倒だ', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B15', text: '物事に集中できない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B16', text: '気分が晴れない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B17', text: '仕事が手につかない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B18', text: '悲しいと感じる', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B19', text: 'めまいがする', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B20', text: '体のふしぶしが痛む', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B21', text: '頭が重かったり頭痛がする', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B22', text: '首筋や肩がこる', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B23', text: '腰が痛い', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B24', text: '目が疲れる', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B25', text: '動悸や息切れがする', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B26', text: '胃腸の具合が悪い', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B27', text: '食欲がない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B28', text: '便秘や下痢をする', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                        { id: 'B29', text: 'よく眠れない', options: ['ほとんどなかった', 'ときどきあった', 'しばしばあった', 'ほとんどいつもあった'] },
+                    ]
+                },
+                {
+                    id: 'C',
+                    title: 'C あなたの周りの方々についてうかがいます。最もあてはまるものに○を付けてください',
+                    questions: [
+                        { id: 'C1', text: '上司とはどのくらい気軽に話ができますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C2', text: '職場の同僚とはどのくらい気軽に話ができますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C3', text: '配偶者、家族、友人等とはどのくらい気軽に話ができますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C4', text: 'あなたが困った時、上司はどのくらい頼りになりますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C5', text: 'あなたが困った時、職場の同僚はどのくらい頼りになりますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C6', text: 'あなたが困った時、配偶者、家族、友人等はどのくらい頼りになりますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C7', text: 'あなたの個人的な問題を相談したら、上司はどのくらいきいてくれますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C8', text: 'あなたの個人的な問題を相談したら、職場の同僚はどのくらいきいてくれますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                        { id: 'C9', text: 'あなたの個人的な問題を相談したら、配偶者、家族、友人等はどのくらいきいてくれますか？', options: ['非常に', 'かなり', '多少', '全くない'] },
+                    ]
+                },
+                {
+                    id: 'D',
+                    title: 'D 満足度について',
+                    questions: [
+                        { id: 'D1', text: '仕事に満足だ', options: ['満足', 'まあ満足', 'やや不満', '不満'] },
+                        { id: 'D2', text: '家庭生活に満足だ', options: ['満足', 'まあ満足', 'やや不満', '不満'] },
+                    ]
+                }
+            ],
+            // Raw score to 5-stage evaluation conversion tables (gender-specific)
+            // Each scale has a 'male' and 'female' object containing score ranges for each of the 5 evaluation points.
+            // Note: The MHLW table has 1 point as high risk, 5 points as low risk.
+            conversionTables: {
+                // A: 仕事のストレス要因
+                '心理的な仕事の負担(量)': {
+                    male: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [6, 7], 5: [3, 5] },
+                    female: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [5, 7], 5: [3, 4] }
+                },
+                '心理的な仕事の負担(質)': {
+                    male: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [5, 7], 5: [3, 5] },
+                    female: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 4] }
+                },
+                '自覚的な身体的負担度': {
+                    male: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] },
+                    female: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] }
+                },
+                '仕事のコントロール度': {
+                    male: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [5, 6], 5: [3, 4] },
+                    female: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 3] }
+                },
+                '技能の活用度': {
+                    male: { 1: [1, 1], 2: [2, 2], 3: [3, 3], 4: [4, 4], 5: [4, 4] },
+                    female: { 1: [1, 1], 2: [2, 2], 3: [3, 3], 4: [4, 4], 5: [4, 4] }
+                },
+                '職場の対人関係でのストレス': {
+                    male: { 1: [10, 12], 2: [8, 9], 3: [6, 7], 4: [4, 5], 5: [3, 3] },
+                    female: { 1: [10, 12], 2: [8, 9], 3: [6, 7], 4: [4, 5], 5: [3, 3] }
+                },
+                '職場環境によるストレス': {
+                    male: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] },
+                    female: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] }
+                },
+                '仕事の適性度': {
+                    male: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] },
+                    female: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] }
+                },
+                '働きがい': {
+                    male: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] },
+                    female: { 1: [4, 4], 2: [3, 3], 3: [2, 2], 4: [1, 1], 5: [1, 1] }
+                },
+                // B: 心身のストレス反応
+                '活気': {
+                    male: { 1: [3, 3], 2: [4, 5], 3: [6, 7], 4: [8, 9], 5: [10, 12] },
+                    female: { 1: [3, 3], 2: [4, 5], 3: [6, 7], 4: [8, 9], 5: [10, 12] }
+                },
+                'イライラ感': {
+                    male: { 1: [10, 12], 2: [8, 9], 3: [6, 7], 4: [4, 5], 5: [3, 3] },
+                    female: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 3] }
+                },
+                '疲労感': {
+                    male: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 3] },
+                    female: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [4, 7], 5: [3, 3] }
+                },
+                '不安感': {
+                    male: { 1: [10, 12], 2: [8, 9], 3: [6, 7], 4: [4, 5], 5: [3, 3] },
+                    female: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 3] }
+                },
+                '抑うつ感': {
+                    male: { 1: [17, 24], 2: [14, 16], 3: [11, 13], 4: [7, 10], 5: [6, 6] },
+                    female: { 1: [18, 24], 2: [15, 17], 3: [12, 14], 4: [7, 11], 5: [6, 6] }
+                },
+                '身体愁訴': {
+                    male: { 1: [27, 44], 2: [22, 26], 3: [17, 21], 4: [12, 16], 5: [11, 11] },
+                    female: { 1: [30, 44], 2: [24, 29], 3: [19, 23], 4: [14, 18], 5: [11, 13] }
+                },
+                // C: 周囲のサポート
+                '上司からのサポート': {
+                    male: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [5, 6], 5: [3, 4] },
+                    female: { 1: [11, 12], 2: [9, 10], 3: [7, 8], 4: [4, 6], 5: [3, 3] }
+                },
+                '同僚からのサポート': {
+                    male: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [6, 7], 5: [3, 5] },
+                    female: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [6, 7], 5: [3, 5] }
+                },
+                '家族・友人からのサポート': {
+                    male: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [7, 7], 5: [3, 6] },
+                    female: { 1: [12, 12], 2: [10, 11], 3: [8, 9], 4: [7, 7], 5: [3, 6] }
+                },
+                // D: 仕事や生活の満足度 (This is from the provided source report analysis, not directly from PDF page 5)
+                '仕事や生活の満足度': {
+                    male: { 1: [7, 8], 2: [5, 6], 3: [4, 4], 4: [2, 3], 5: [2, 3] },
+                    female: { 1: [7, 8], 2: [5, 6], 3: [4, 4], 4: [2, 3], 5: [2, 3] }
+                }
+            },
+            // Scale definitions and their corresponding question IDs for raw score calculation
+            scales: {
+                // A: 仕事のストレス要因
+                '心理的な仕事の負担(量)': { qIds: ['A1', 'A2', 'A3'], formula: (q) => 15 - (q.A1 + q.A2 + q.A3) },
+                '心理的な仕事の負担(質)': { qIds: ['A4', 'A5', 'A6'], formula: (q) => 15 - (q.A4 + q.A5 + q.A6) },
+                '自覚的な身体的負担度': { qIds: ['A7'], formula: (q) => 5 - q.A7 },
+                '仕事のコントロール度': { qIds: ['A8', 'A9', 'A10'], formula: (q) => 15 - (q.A8 + q.A9 + q.A10) },
+                '技能の活用度': { qIds: ['A11'], formula: (q) => q.A11 },
+                '職場の対人関係でのストレス': { qIds: ['A12', 'A13', 'A14'], formula: (q) => 10 - (q.A12 + q.A13) + q.A14 },
+                '職場環境によるストレス': { qIds: ['A15'], formula: (q) => 5 - q.A15 },
+                '仕事の適性度': { qIds: ['A16'], formula: (q) => 5 - q.A16 },
+                '働きがい': { qIds: ['A17'], formula: (q) => 5 - q.A17 },
+
+                // B: 心身のストレス反応
+                '活気': { qIds: ['B1', 'B2', 'B3'], formula: (q) => q.B1 + q.B2 + q.B3 },
+                'イライラ感': { qIds: ['B4', 'B5', 'B6'], formula: (q) => q.B4 + q.B5 + q.B6 },
+                '疲労感': { qIds: ['B7', 'B8', 'B9'], formula: (q) => q.B7 + q.B8 + q.B9 },
+                '不安感': { qIds: ['B10', 'B11', 'B12'], formula: (q) => q.B10 + q.B11 + q.B12 },
+                '抑うつ感': { qIds: ['B13', 'B14', 'B15', 'B16', 'B17', 'B18'], formula: (q) => q.B13 + q.B14 + q.B15 + q.B16 + q.B17 + q.B18 },
+                '身体愁訴': { qIds: ['B19', 'B20', 'B21', 'B22', 'B23', 'B24', 'B25', 'B26', 'B27', 'B28', 'B29'], formula: (q) => q.B19 + q.B20 + q.B21 + q.B22 + q.B23 + q.B24 + q.B25 + q.B26 + q.B27 + q.B28 + q.B29 },
+
+                // C: 周囲のサポート
+                '上司からのサポート': { qIds: ['C1', 'C4', 'C7'], formula: (q) => 15 - (q.C1 + q.C4 + q.C7) },
+                '同僚からのサポート': { qIds: ['C2', 'C5', 'C8'], formula: (q) => 15 - (q.C2 + q.C5 + q.C8) },
+                '家族・友人からのサポート': { qIds: ['C3', 'C6', 'C9'], formula: (q) => 15 - (q.C3 + q.C6 + q.C9) },
+
+                // D: 仕事や生活の満足度
+                '仕事や生活の満足度': { qIds: ['D1', 'D2'], formula: (q) => 10 - (q.D1 + q.D2) },
+            },
+            // High-stress criteria based on MHLW guidelines
+            highStressCriteria: {
+                criterion1: (bGroupEvalSum) => bGroupEvalSum <= 12,
+                criterion2: (bGroupEvalSum, acGroupEvalSum) => bGroupEvalSum <= 17 && acGroupEvalSum <= 26
+            }
+        };
+
+        const firebaseConfig = { /* Firebase config is handled by the environment */ };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        let userId = null;
+        let authReady = false;
+
+        // Firebase Authentication Setup
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user) {
+                userId = user.uid;
+            } else {
+                try {
+                    // Sign in anonymously if no user is logged in
+                    await auth.signInAnonymously();
+                    userId = auth.currentUser.uid;
+                } catch (error) {
+                    console.error("匿名認証に失敗しました:", error);
+                }
+            }
+            authReady = true;
+            loadPastResults();
+        });
+
+        // Utility function to wrap long Chart.js labels
+        function wrapLabel(label, maxCharPerLine) {
+            if (typeof label !== 'string') return label;
+            const words = label.split(' ');
+            let line = '';
+            let result = [];
+            for (let i = 0; i < words.length; i++) {
+                if (line.length + words[i].length + (line === '' ? 0 : 1) > maxCharPerLine) {
+                    result.push(line);
+                    line = words[i];
+                } else {
+                    line += (line === '' ? '' : ' ') + words[i];
+                }
+            }
+            result.push(line);
+            return result;
+        }
+
+        // Get 5-stage evaluation point for a raw score
+        function getEvaluationPoint(scaleName, rawScore, gender) {
+            const conversionTable = STRESS_CHECK_DATA.conversionTables[scaleName];
+            if (!conversionTable || !conversionTable[gender]) {
+                console.error(`換算テーブルが見つかりません: ${scaleName} (${gender})`);
+                return null;
+            }
+            const genderTable = conversionTable[gender];
+            for (const point in genderTable) {
+                const [min, max] = genderTable[point];
+                if (rawScore >= min && rawScore <= max) {
+                    return parseInt(point);
+                }
+            }
+            console.warn(`素点 ${rawScore} (${scaleName}, ${gender}) がどの評価範囲にも一致しません。`);
+            return null;
+        }
+
+        let radarChartA, radarChartB, radarChartC, judgmentChart1, judgmentChart2;
+
+        // Render Radar Chart
+        function renderRadarChart(canvasId, labels, data, chartTitle) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (Chart.getChart(canvasId)) {
+                Chart.getChart(canvasId).destroy();
+            }
+            return new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels.map(label => wrapLabel(label, 16)),
+                    datasets: [{
+                        label: 'あなたの評価点',
+                        data: data,
+                        backgroundColor: 'rgba(75, 192, 192, 0.4)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                        pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgba(75, 192, 192, 1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.raw + '点';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            angleLines: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#e0e0e0'
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: 12
+                                },
+                                color: '#333'
+                            },
+                            min: 1,
+                            max: 5,
+                            ticks: {
+                                stepSize: 1,
+                                beginAtZero: false,
+                                color: '#555',
+                                backdropColor: 'rgba(255, 255, 255, 0.8)',
+                                z: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Render Judgment Chart (Scatter Plot)
+        function renderJudgmentChart(canvasId, data, title, xAxisLabel, yAxisLabel, xThresholds, yThresholds, quadrantLabels) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            if (Chart.getChart(canvasId)) {
+                Chart.getChart(canvasId).destroy();
+            }
+
+            const backgroundPlugin = {
+                id: 'customCanvasBackgroundColor',
+                beforeDraw: (chart, args, options) => {
+                    const { ctx, chartArea: { left, top, right, bottom }, scales: { x, y } } = chart;
+                    ctx.save();
+
+                    const xMin = x.min;
+                    const xMax = x.max;
+                    const yMin = y.min;
+                    const yMax = y.max;
+
+                    const xThresh1 = x.getPixelForValue(xThresholds.low);
+                    const xThresh2 = x.getPixelForValue(xThresholds.high);
+                    const yThresh1 = y.getPixelForValue(yThresholds.low);
+                    const yThresh2 = y.getPixelForValue(yThresholds.high);
+
+                    // Quadrant colors and labels
+                    const quadrants = [
+                        { x: xThresh1, y: yThresh1, width: right - xThresh1, height: bottom - yThresh1, color: 'rgba(255, 99, 132, 0.2)', label: quadrantLabels.q1 }, // Top-Right (High X, High Y)
+                        { x: left, y: yThresh1, width: xThresh1 - left, height: bottom - yThresh1, color: 'rgba(255, 205, 86, 0.2)', label: quadrantLabels.q2 }, // Top-Left (Low X, High Y)
+                        { x: xThresh1, y: top, width: right - xThresh1, height: yThresh1 - top, color: 'rgba(54, 162, 235, 0.2)', label: quadrantLabels.q3 }, // Bottom-Right (High X, Low Y)
+                        { x: left, y: top, width: xThresh1 - left, height: yThresh1 - top, color: 'rgba(75, 192, 192, 0.2)', label: quadrantLabels.q4 }  // Bottom-Left (Low X, Low Y)
+                    ];
+
+                    // Adjust for inverted axes if necessary (e.g., if higher score is better for X/Y)
+                    // For example, if X axis is 'stress' (low score is good), then xThresh1 should be for the 'bad' side.
+                    // Here, we assume 1-5 scale where 1 is bad, 5 is good.
+                    // So low threshold means bad, high threshold means good.
+                    // For 量-コントロール: 量 (X) 1=bad, 5=good. コントロール (Y) 1=bad, 5=good.
+                    // For 職場の支援: 対人関係ストレス (X) 1=bad, 5=good. サポート (Y) 1=bad, 5=good.
+
+                    // Adjust quadrant definitions based on typical stress diagram interpretations:
+                    // For 量-コントロール: X (量) - higher is better (less stress). Y (コントロール) - higher is better (more control).
+                    // So, (Low X, Low Y) is high stress. (High X, High Y) is good.
+                    // The labels and colors need to match the actual quadrants.
+
+                    // Re-define quadrants for clarity based on typical stress diagrams:
+                    // Assuming X (負荷/ストレス) lower score is better (less stress)
+                    // Assuming Y (コントロール/サポート) higher score is better (more control/support)
+
+                    // Quadrant 1: High Stress / Low Control/Support (Bottom-Left)
+                    // Quadrant 2: High Stress / High Control/Support (Top-Left)
+                    // Quadrant 3: Low Stress / Low Control/Support (Bottom-Right)
+                    // Quadrant 4: Low Stress / High Control/Support (Top-Right)
+
+                    // Let's use specific pixel values for clarity based on the 1-5 scale
+                    // X-axis: 1 (bad) to 5 (good)
+                    // Y-axis: 1 (bad) to 5 (good)
+
+                    const xMid = x.getPixelForValue(xThresholds.mid); // e.g., 3.5 for 1-5 scale
+                    const yMid = y.getPixelForValue(yThresholds.mid); // e.g., 3.5 for 1-5 scale
+
+                    // Quadrant mapping based on evaluation points (1=bad, 5=good)
+                    // Top-Right: Low Stress (X good), High Control/Support (Y good) -> 良好
+                    // Bottom-Right: Low Stress (X good), Low Control/Support (Y bad) -> 職場環境改善
+                    // Top-Left: High Stress (X bad), High Control/Support (Y good) -> 積極的対応
+                    // Bottom-Left: High Stress (X bad), Low Control/Support (Y bad) -> 高ストレス
+
+                    const actualQuadrants = [
+                        // Top-Right (X good, Y good)
+                        { x: xMid, y: top, width: right - xMid, height: yMid - top, color: 'rgba(144, 238, 144, 0.2)', label: quadrantLabels.q4 }, // 良好 (Light Green)
+                        // Bottom-Right (X good, Y bad)
+                        { x: xMid, y: yMid, width: right - xMid, height: bottom - yMid, color: 'rgba(255, 255, 0, 0.2)', label: quadrantLabels.q3 }, // 職場環境改善 (Yellow)
+                        // Top-Left (X bad, Y good)
+                        { x: left, y: top, width: xMid - left, height: yMid - top, color: 'rgba(173, 216, 230, 0.2)', label: quadrantLabels.q2 }, // 積極的対応 (Light Blue)
+                        // Bottom-Left (X bad, Y bad)
+                        { x: left, y: yMid, width: xMid - left, height: bottom - yMid, color: 'rgba(255, 99, 132, 0.2)', label: quadrantLabels.q1 }  // 高ストレス (Red)
+                    ];
+
+                    actualQuadrants.forEach(q => {
+                        ctx.fillStyle = q.color;
+                        ctx.fillRect(q.x, q.y, q.width, q.height);
+                        ctx.fillStyle = '#333';
+                        ctx.font = '12px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(q.label, q.x + q.width / 2, q.y + q.height / 2);
+                    });
+
+                    ctx.restore();
+                }
+            };
+
+            return new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'あなたの位置',
+                        data: data,
+                        backgroundColor: 'rgba(75, 192, 192, 1)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 2,
+                        pointRadius: 8,
+                        pointHoverRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: title,
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${xAxisLabel}: ${context.parsed.x}点, ${yAxisLabel}: ${context.parsed.y}点`;
+                                }
+                            }
+                        },
+                        customCanvasBackgroundColor: {}
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: 1,
+                            max: 5,
+                            ticks: {
+                                stepSize: 1,
+                                color: '#555'
+                            },
+                            title: {
+                                display: true,
+                                text: xAxisLabel,
+                                font: { size: 14, weight: 'bold' },
+                                color: '#333'
+                            },
+                            grid: {
+                                color: '#e0e0e0',
+                                drawOnChartArea: true,
+                                drawTicks: true,
+                                borderDash: [5, 5]
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'left',
+                            min: 1,
+                            max: 5,
+                            ticks: {
+                                stepSize: 1,
+                                color: '#555'
+                            },
+                            title: {
+                                display: true,
+                                text: yAxisLabel,
+                                font: { size: 14, weight: 'bold' },
+                                color: '#333'
+                            },
+                            grid: {
+                                color: '#e0e0e0',
+                                drawOnChartArea: true,
+                                drawTicks: true,
+                                borderDash: [5, 5]
+                            }
+                        }
+                    }
+                },
+                plugins: [backgroundPlugin]
+            });
+        }
+
+        // Calculate scores and render results
+        async function calculateAndRenderResults() {
+            const form = document.getElementById('stress-check-form');
+            const formData = new FormData(form);
+            const answers = {};
+            let gender = '';
+
+            // Collect answers and gender
+            for (const [key, value] of formData.entries()) {
+                if (key === 'gender') {
+                    gender = value;
+                } else {
+                    answers[key] = parseInt(value);
+                }
+            }
+
+            // Input validation
+            let allAnswered = true;
+            const allQuestions = STRESS_CHECK_DATA.sections.flatMap(section => section.questions);
+            for (const q of allQuestions) {
+                if (answers[q.id] === undefined || isNaN(answers[q.id])) {
+                    allAnswered = false;
+                    break;
+                }
+            }
+
+            if (!allAnswered) {
+                alert('全ての質問に回答してください。');
+                return;
+            }
+            if (!gender) {
+                alert('性別を選択してください。');
+                return;
+            }
+
+            const rawScores = {};
+            const evaluationPoints = {};
+            let bGroupEvalSum = 0;
+            let acGroupEvalSum = 0;
+
+            // Calculate raw scores and evaluation points
+            for (const scaleName in STRESS_CHECK_DATA.scales) {
+                const scaleDef = STRESS_CHECK_DATA.scales[scaleName];
+                try {
+                    const rawScore = scaleDef.formula(answers);
+                    rawScores[scaleName] = rawScore;
+                    const evalPoint = getEvaluationPoint(scaleName, rawScore, gender);
+                    if (evalPoint === null) {
+                        console.error(`評価点の算出に失敗しました: ${scaleName}`);
+                        alert(`評価点の算出に失敗しました: ${scaleName}。入力を見直してください。`);
+                        return;
+                    }
+                    evaluationPoints[scaleName] = evalPoint;
+
+                    // Sum for high stress criteria
+                    if (['活気', 'イライラ感', '疲労感', '不安感', '抑うつ感', '身体愁訴'].includes(scaleName)) {
+                        bGroupEvalSum += evalPoint;
+                    } else if (
+                        ['心理的な仕事の負担(量)', '心理的な仕事の負担(質)', '自覚的な身体的負担度', '仕事のコントロール度', '技能の活用度', '職場の対人関係でのストレス', '職場環境によるストレス', '仕事の適性度', '働きがい', '上司からのサポート', '同僚からのサポート', '家族・友人からのサポート', '仕事や生活の満足度'].includes(scaleName)
+                    ) {
+                        acGroupEvalSum += evalPoint;
+                    }
+                } catch (e) {
+                    console.error(`尺度 ${scaleName} の計算中にエラーが発生しました:`, e);
+                    alert(`スコア計算中にエラーが発生しました: ${scaleName}。入力を見直してください。`);
+                    return;
+                }
+            }
+
+            // Determine high stress status
+            let isHighStress = false;
+            if (STRESS_CHECK_DATA.highStressCriteria.criterion1(bGroupEvalSum)) {
+                isHighStress = true;
+            } else if (STRESS_CHECK_DATA.highStressCriteria.criterion2(bGroupEvalSum, acGroupEvalSum)) {
+                isHighStress = true;
+            }
+
+            const currentResults = {
+                timestamp: Date.now(),
+                gender: gender,
+                rawScores: rawScores,
+                evaluationPoints: evaluationPoints,
+                bGroupEvalSum: bGroupEvalSum,
+                acGroupEvalSum: acGroupEvalSum,
+                isHighStress: isHighStress,
+                answers: answers
+            };
+
+            // Save results to Firestore
+            if (authReady && userId) {
+                try {
+                    const docRef = db.collection(`users/${userId}/stress_check_results`).doc(currentResults.timestamp.toString());
+                    await docRef.set(currentResults);
+                    console.log("結果がFirestoreに保存されました！");
+                    loadPastResults(); // Reload past results to include the new one
+                } catch (error) {
+                    console.error("結果の保存中にエラーが発生しました:", error);
+                    alert("結果の保存中にエラーが発生しました。");
+                }
+            } else {
+                console.warn("ユーザーIDが利用できないため、結果はFirestoreに保存されませんでした。");
+            }
+
+            displayResults(currentResults);
+        }
+
+        // Display Results
+        function displayResults(results) {
+            document.getElementById('questionnaire-section').classList.add('hidden');
+            document.getElementById('results-section').classList.remove('hidden');
+            document.getElementById('nav-form').classList.remove('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-form').classList.add('text-gray-600');
+            document.getElementById('nav-results').classList.add('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-results').classList.remove('text-gray-600');
+
+            // High Stress Judgment Message
+            const highStressMessageElem = document.getElementById('high-stress-message');
+            const adviceMessageElem = document.getElementById('advice-message');
+            const highStressCard = document.getElementById('high-stress-judgment');
+
+            if (results.isHighStress) {
+                highStressMessageElem.textContent = "あなたは高ストレス者と判定されました。産業医への面談をおすすめします。";
+                adviceMessageElem.textContent = "面接指導の申し出が可能です。ご自身の健康状態について、専門家にご相談ください。面談希望の申請方法については、職場の担当部署にご確認ください。面談内容は、就業上の措置が必要な場合のみ、その内容を元に必要部署に伝えられますが、情報の共有範囲は極めて限定的であり、プライバシーに配慮した対応となります。";
+                highStressCard.classList.remove('bg-green-50', 'border-green-300');
+                highStressCard.classList.add('bg-red-50', 'border-red-300');
+                highStressMessageElem.classList.remove('text-green-800');
+                highStressMessageElem.classList.add('text-red-800');
+                adviceMessageElem.classList.remove('text-green-700');
+                adviceMessageElem.classList.add('text-red-700');
+            } else {
+                highStressMessageElem.textContent = "あなたは高ストレス者ではありません。引き続きセルフケアを心がけましょう。";
+                adviceMessageElem.textContent = "日々の生活の中で、リフレッシュやストレス解消法を見つけ、心身の健康を保ちましょう。必要であれば、いつでも相談窓口を利用してください。";
+                highStressCard.classList.remove('bg-red-50', 'border-red-300');
+                highStressCard.classList.add('bg-green-50', 'border-green-300');
+                highStressMessageElem.classList.remove('text-red-800');
+                highStressMessageElem.classList.add('text-green-800');
+                adviceMessageElem.classList.remove('text-red-700');
+                adviceMessageElem.classList.add('text-green-700');
+            }
+
+            // Radar Chart Data Preparation
+            const radarAData = [];
+            const radarALabels = [];
+            const radarBData = [];
+            const radarBLabels = [];
+            const radarCData = []; // Custom C group radar
+            const radarCLabels = [];
+
+            // Define scales for each radar chart
+            const scalesA = ['心理的な仕事の負担(量)', '心理的な仕事の負担(質)', '自覚的な身体的負担度', '仕事のコントロール度', '技能の活用度', '職場の対人関係でのストレス', '職場環境によるストレス', '仕事の適性度', '働きがい'];
+            const scalesB = ['活気', 'イライラ感', '疲労感', '不安感', '抑うつ感', '身体愁訴'];
+            const scalesC_custom = ['上司からのサポート', '同僚からのサポート', '家族・友人からのサポート', '仕事や生活の満足度']; // User requested 4 axes
+
+            scalesA.forEach(scale => {
+                radarALabels.push(scale);
+                radarAData.push(results.evaluationPoints[scale]);
+            });
+            scalesB.forEach(scale => {
+                radarBLabels.push(scale);
+                radarBData.push(results.evaluationPoints[scale]);
+            });
+            scalesC_custom.forEach(scale => {
+                radarCLabels.push(scale);
+                radarCData.push(results.evaluationPoints[scale]);
+            });
+
+            // Render Radar Charts
+            radarChartA = renderRadarChart('radarChartA', radarALabels, radarAData, 'A: ストレスの原因と考えられる因子');
+            radarChartB = renderRadarChart('radarChartB', radarBLabels, radarBData, 'B: ストレスによっておこる心身の反応');
+            radarChartC = renderRadarChart('radarChartC', radarCLabels, radarCData, 'C: ストレス反応に影響を与える他の因子');
+
+            // Render Judgment Charts
+            const quantitativeLoadEval = results.evaluationPoints['心理的な仕事の負担(量)'];
+            const controlEval = results.evaluationPoints['仕事のコントロール度'];
+            const interpersonalStressEval = results.evaluationPoints['職場の対人関係でのストレス'];
+            const bossSupportEval = results.evaluationPoints['上司からのサポート'];
+
+            // 量―コントロール判定図
+            const judgment1Data = [{ x: quantitativeLoadEval, y: controlEval }];
+            const judgment1QuadrantLabels = {
+                q1: '高ストレス', // High Stress / Low Control (Bottom-Left)
+                q2: '積極的対応', // High Stress / High Control (Top-Left)
+                q3: '職場環境改善', // Low Stress / Low Control (Bottom-Right)
+                q4: '良好' // Low Stress / High Control (Top-Right)
+            };
+            judgmentChart1 = renderJudgmentChart(
+                'judgmentChart1',
+                judgment1Data,
+                '量―コントロール判定図',
+                '心理的な仕事の負担(量) (点数が低いほど高ストレス)', // X軸ラベル
+                '仕事のコントロール度 (点数が高いほど高コントロール)', // Y軸ラベル
+                { low: 3.5, high: 3.5, mid: 3.5 }, // X軸の閾値 (例: 3.5で分割)
+                { low: 3.5, high: 3.5, mid: 3.5 }, // Y軸の閾値 (例: 3.5で分割)
+                judgment1QuadrantLabels
+            );
+
+            // 職場の支援判定図
+            const judgment2Data = [{ x: interpersonalStressEval, y: bossSupportEval }];
+            const judgment2QuadrantLabels = {
+                q1: '高ストレス', // High Interpersonal Stress / Low Support (Bottom-Left)
+                q2: '積極的対応', // High Interpersonal Stress / High Support (Top-Left)
+                q3: '職場環境改善', // Low Interpersonal Stress / Low Support (Bottom-Right)
+                q4: '良好' // Low Interpersonal Stress / High Support (Top-Right)
+            };
+            judgmentChart2 = renderJudgmentChart(
+                'judgmentChart2',
+                judgment2Data,
+                '職場の支援判定図',
+                '職場の対人関係でのストレス (点数が低いほど高ストレス)', // X軸ラベル
+                '上司からのサポート (点数が高いほど高サポート)', // Y軸ラベル
+                { low: 3.5, high: 3.5, mid: 3.5 }, // X軸の閾値
+                { low: 3.5, high: 3.5, mid: 3.5 }, // Y軸の閾値
+                judgment2QuadrantLabels
+            );
+
+
+            // Detailed Evaluation Table
+            const detailedTableBody = document.getElementById('detailed-evaluation-body');
+            detailedTableBody.innerHTML = ''; // Clear previous results
+            for (const scaleName in results.evaluationPoints) {
+                const evalPoint = results.evaluationPoints[scaleName];
+                let statusText = '';
+                let statusColorClass = '';
+                if (evalPoint === 1) {
+                    statusText = '非常に高ストレス';
+                    statusColorClass = 'text-red-600';
+                } else if (evalPoint === 2) {
+                    statusText = 'やや高ストレス';
+                    statusColorClass = 'text-orange-600';
+                } else if (evalPoint === 3) {
+                    statusText = '標準';
+                    statusColorClass = 'text-yellow-600';
+                } else if (evalPoint === 4) {
+                    statusText = 'やや低ストレス';
+                    statusColorClass = 'text-blue-600';
+                } else if (evalPoint === 5) {
+                    statusText = '非常に低ストレス';
+                    statusColorClass = 'text-green-600';
+                }
+
+                const row = `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${scaleName}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${evalPoint}点</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm ${statusColorClass}">${statusText}</td>
+                    </tr>
+                `;
+                detailedTableBody.insertAdjacentHTML('beforeend', row);
+            }
+        }
+
+        // Load Past Results from Firestore
+        async function loadPastResults() {
+            if (!authReady || !userId) {
+                console.warn("認証またはユーザーIDが準備できていません。過去の結果をロードできません。");
+                return;
+            }
+            try {
+                const resultsCollectionRef = db.collection(`users/${userId}/stress_check_results`);
+                const querySnapshot = await resultsCollectionRef.orderBy('timestamp', 'desc').get();
+                const pastResults = querySnapshot.docs.map(doc => doc.data());
+
+                const pastResultsBody = document.getElementById('past-results-body');
+                pastResultsBody.innerHTML = ''; // Clear previous results
+
+                if (pastResults.length === 0) {
+                    pastResultsBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">過去の結果はありません。</td></tr>`;
+                    return;
+                }
+
+                pastResults.forEach(result => {
+                    const date = new Date(result.timestamp).toLocaleDateString('ja-JP');
+                    const genderText = result.gender === 'male' ? '男性' : '女性';
+                    const isHighStressText = result.isHighStress ? 'はい' : 'いいえ';
+                    const highStressClass = result.isHighStress ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800';
+
+                    const row = `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${date}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${genderText}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${result.bGroupEvalSum}点</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${result.acGroupEvalSum}点</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${highStressClass}">
+                                    ${isHighStressText}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                    pastResultsBody.insertAdjacentHTML('beforeend', row);
+                });
+            } catch (error) {
+                console.error("過去の結果のロード中にエラーが発生しました:", error);
+                pastResultsBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">過去の結果のロードに失敗しました。</td></tr>`;
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('stress-check-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            calculateAndRenderResults();
+        });
+
+        document.getElementById('nav-form').addEventListener('click', () => {
+            document.getElementById('questionnaire-section').classList.remove('hidden');
+            document.getElementById('results-section').classList.add('hidden');
+            document.getElementById('nav-form').classList.add('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-form').classList.remove('text-gray-600');
+            document.getElementById('nav-results').classList.remove('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-results').classList.add('text-gray-600');
+        });
+
+        document.getElementById('nav-results').addEventListener('click', () => {
+            document.getElementById('questionnaire-section').classList.add('hidden');
+            document.getElementById('results-section').classList.remove('hidden');
+            document.getElementById('nav-results').classList.add('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-results').classList.remove('text-gray-600');
+            document.getElementById('nav-form').classList.remove('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-form').classList.add('text-gray-600');
+            loadPastResults(); // Ensure latest past results are loaded when navigating to results
+        });
+
+        document.getElementById('back-to-form-button').addEventListener('click', () => {
+            document.getElementById('questionnaire-section').classList.remove('hidden');
+            document.getElementById('results-section').classList.add('hidden');
+            document.getElementById('nav-form').classList.add('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-form').classList.remove('text-gray-600');
+            document.getElementById('nav-results').classList.remove('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-results').classList.add('text-gray-600');
+            document.getElementById('stress-check-form').reset(); // Reset the form
+        });
+
+        // Initial load: ensure questionnaire is visible
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('questionnaire-section').classList.remove('hidden');
+            document.getElementById('results-section').classList.add('hidden');
+            document.getElementById('nav-form').classList.add('text-indigo-600', 'bg-indigo-100');
+            document.getElementById('nav-results').classList.remove('text-indigo-600', 'bg-indigo-100');
+        });
+    </script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-firestore.js"></script>
+    <script>
+        // Initialize Firebase
+        // NOTE: __firebase_config is provided by the environment
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        firebase.initializeApp(firebaseConfig);
+    </script>
+</body>
+</html>
